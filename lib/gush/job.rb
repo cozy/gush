@@ -2,7 +2,7 @@ module Gush
   class Job
     attr_accessor :workflow_id, :incoming, :outgoing, :params,
       :finished_at, :failed_at, :started_at, :enqueued_at, :payloads, :klass, :queue
-    attr_reader :id, :klass, :output_payload, :params
+    attr_reader :id, :klass, :output_payload, :params, :error
 
     def initialize(opts = {})
       options = opts.dup
@@ -22,7 +22,8 @@ module Gush
         failed_at: failed_at,
         params: params,
         workflow_id: workflow_id,
-        output_payload: output_payload
+        output_payload: output_payload,
+        error: error
       }
     end
 
@@ -60,8 +61,9 @@ module Gush
       @finished_at = current_timestamp
     end
 
-    def fail!
+    def fail!(error = nil)
       @finished_at = @failed_at = current_timestamp
+      @error = error
     end
 
     def enqueued?
@@ -125,6 +127,7 @@ module Gush
       @output_payload = opts[:output_payload]
       @workflow_id    = opts[:workflow_id]
       @queue          = opts[:queue]
+      @error          = opts[:error]
     end
   end
 end

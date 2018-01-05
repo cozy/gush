@@ -185,7 +185,7 @@ module Gush
     end
 
     def to_json(options = {})
-      Gush::JSON.encode(to_hash)
+      Gush::JSON.encode(to_hash, options)
     end
 
     def self.descendants

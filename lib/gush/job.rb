@@ -32,7 +32,7 @@ module Gush
     end
 
     def to_json(options = {})
-      Gush::JSON.encode(as_json)
+      Gush::JSON.encode(as_json, options)
     end
 
     def self.from_hash(hash)

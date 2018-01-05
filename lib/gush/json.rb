@@ -1,7 +1,7 @@
 module Gush
   class JSON
-    def self.encode(data)
-      MultiJson.dump(data)
+    def self.encode(data, options = {})
+      MultiJson.dump(data, options)
     end
 
     def self.decode(data, options = {})

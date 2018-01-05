@@ -2,7 +2,7 @@ require 'securerandom'
 
 module Gush
   class Workflow
-    attr_accessor :id, :jobs, :stopped, :persisted, :arguments
+    attr_accessor :id, :jobs, :stopped, :persisted, :arguments, :dependencies
 
     def initialize(*args)
       @id = id

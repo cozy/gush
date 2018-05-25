@@ -25,6 +25,17 @@ module Gush
       flow
     end
 
+    def self.create!(*args)
+      flow = self.create *args
+      flow.start!
+      flow
+    end
+
+    def self.create_and_wait!(*args)
+      flow = self.create *args
+      flow.start_and_wait!
+    end
+
     def continue
       client = Gush::Client.new
       failed_jobs = jobs.select(&:failed?)
@@ -182,6 +193,21 @@ module Gush
         started_at: started_at,
         finished_at: finished_at
       }
+    end
+
+    def wait(n: 10, delay: 1, debug: false)
+      n.times do
+        self.reload
+        puts "Workflow #{self.class} #{@id}, status: #{self.status}" if debug
+        break if self.finished?
+        sleep delay
+      end
+    end
+
+    def start_and_wait!(**kwargs)
+      self.start!
+      self.wait **kwargs
+      self
     end
 
     def to_json(options = {})

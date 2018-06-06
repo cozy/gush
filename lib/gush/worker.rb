@@ -24,7 +24,20 @@ module Gush
       end
     end
 
+    def serialize
+      super.merge 'retry_attempt' => retry_attempt
+    end
+
+    def deserialize(job_data)
+      super job_data
+      @retry_attempt = job_data.fetch 'retry_attempt', 1
+    end
+
     private
+
+    def retry_attempt
+      @retry_attempt ||= 1
+    end
 
     attr_reader :client, :workflow_id, :job
 
@@ -35,6 +48,7 @@ module Gush
     def setup_job(workflow_id, job_id)
       @workflow_id = workflow_id
       @job ||= client.find_job(workflow_id, job_id)
+      @retry = @job.class.instance_variable_get :@retry
     end
 
     def incoming_payloads
@@ -76,6 +90,33 @@ module Gush
             client.enqueue_job(workflow_id, out)
           end
         end
+      end
+    end
+
+    def internal_retry(exception)
+      return unless @retry
+
+      this_delay = @retry.retry_delay @retry_attempt, exception
+      cb         = @retry.retry_callback
+
+      cb = cb && instance_exec(exception, this_delay, &cb)
+      return if cb == :halt
+
+      # TODO: This breaks DelayedJob and Resque for some weird ActiveSupport reason
+      # logger.info("Retrying (attempt #{retry_attempt + 1}, waiting #{this_delay}s
+      @retry_attempt += 1
+      retry_job wait: this_delay
+    end
+
+    # Override `rescue_with_handler` to make sure our catch is before callbacks,
+    # so `rescue_from`s will only be run after any retry attempts have been exhausted.
+    def rescue_with_handler(exception)
+      return super exception unless @retry
+      if @retry.should_retry? @retry_attempt, exception
+        internal_retry exception
+        return true # Exception has been handled
+      else
+        return super exception
       end
     end
   end

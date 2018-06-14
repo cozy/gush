@@ -96,6 +96,9 @@ module Gush
     def internal_retry(exception)
       return false unless @retry
 
+      should_retry = @retry.should_retry? @retry_attempt, exception
+      return false unless should_retry
+
       this_delay = @retry.retry_delay @retry_attempt, exception
       cb         = @retry.retry_callback
 
@@ -106,7 +109,6 @@ module Gush
       # logger.info("Retrying (attempt #{retry_attempt + 1}, waiting #{this_delay}s
       @retry_attempt += 1
       retry_job wait: this_delay
-      true
     end
   end
 end

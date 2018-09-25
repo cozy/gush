@@ -30,6 +30,12 @@ module Gush
     def name
       @name ||= "#{klass}|#{id}"
     end
+    
+    def payload(clazz)
+      payload = payloads.detect { |f| f[:class] == clazz.name }
+      raise "Unable to find payload for #{clazz}, available: #{payloads.collect { |f| f[:class]}}" unless payload
+      payload[:output]
+    end
 
     def to_json(options = {})
       Gush::JSON.encode(as_json, options)

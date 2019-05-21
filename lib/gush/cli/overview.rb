@@ -1,8 +1,6 @@
 module Gush
   class CLI
     class Overview
-      attr_reader :workflow
-
       def initialize(workflow)
         @workflow = workflow
       end
@@ -11,18 +9,48 @@ module Gush
         Terminal::Table.new(rows: rows)
       end
 
-      def status
-        if workflow.failed?
-          failed_status
-        elsif workflow.running?
-          running_status
-        elsif workflow.finished?
-          "done".green
-        elsif workflow.stopped?
-          "stopped".red
-        else
-          "ready to start".blue
-        end
+      STATUS = {
+        stopped: {
+          color: :light_black,
+          label: 'Stopped',
+          symbol: '⏸️'
+        },
+        pending: {
+          color: :cyan,
+          label: 'Pending',
+          symbol: '💤'
+        },
+        enqueued: {
+          color: :blue,
+          label: 'Enqueued',
+          symbol: '🕓'
+        },
+        running: {
+          color: :magenta,
+          label: 'Running',
+          symbol: '⚙️'
+        },
+        retrying: {
+          color: :yellow,
+          label: 'Retrying',
+          symbol: '🔁'
+        },
+        failed: {
+          color: :red,
+          label: 'Failed',
+          symbol: '❌'
+        },
+        succeeded: {
+          color: :green,
+          label: 'Succeeded',
+          symbol: '✅'
+        }
+      }.freeze
+
+      def status(status)
+        status = @workflow.status
+        status = STATUS[status]
+        status[:label].colorize status[:color]
       end
 
       def jobs_list(jobs)
@@ -33,7 +61,6 @@ module Gush
         end
       end
 
-      private
       def rows
         [].tap do |rows|
           columns.each_pair do |name, value|
@@ -44,49 +71,51 @@ module Gush
       end
 
       def columns
+        status = (STATUS.keys - %i[stopped]).collect do |status|
+          count = jobs_count status
+          next nil unless count > 0
+          status = STATUS[status]
+          color = status[:color]
+          label = status[:label].colorize color
+          count = count.to_s.colorize color
+          ["#{label} jobs", count]
+        end.compact.to_h
         {
-          "ID" => workflow.id,
-          "Name" => workflow.class.to_s,
-          "Jobs" => workflow.jobs.count,
-          "Failed jobs" => failed_jobs_count.red,
-          "Succeeded jobs" => succeeded_jobs_count.green,
-          "Enqueued jobs" => enqueued_jobs_count.yellow,
-          "Running jobs" => running_jobs_count.blue,
-          "Remaining jobs" => remaining_jobs_count,
-          "Started at" => started_at,
-          "Status" => status
-        }
+                "ID" => @workflow.id,
+                "Name" => @workflow.class.to_s,
+                "Jobs" => @workflow.jobs.count,
+        }.merge(status)
+          .merge({
+          "Remaining jobs" => self.remaining_jobs_count,
+          "Started at" => self.time(@workflow.started_at),
+          "Finished at" => self.time(@workflow.finished_at),
+          "Status" => self.status(@workflow.status)
+        })
       end
 
       def running_status
-        finished = succeeded_jobs_count.to_i
-        status = "running".yellow
+        finished = self.succeeded_jobs_count.to_i
+        status = self.status :running
         status += "\n#{finished}/#{total_jobs_count} [#{(finished*100)/total_jobs_count}%]"
+        status
       end
 
-      def started_at
-        Time.at(workflow.started_at) if workflow.started_at
+      def time(time)
+        Time.at time if time
       end
 
       def failed_status
-        status = "failed".light_red
-        status += "\n#{failed_job} failed"
+        status = self.status :failed
+        status += "\n#{self.failed_job} failed"
+        status
       end
 
       def job_to_list_element(job)
-        name = job.name
-        case
-        when job.failed?
-          "[✗] #{name.red} \n"
-        when job.finished?
-          "[✓] #{name.green} \n"
-        when job.enqueued?
-          "[•] #{name.yellow} \n"
-        when job.running?
-          "[•] #{name.blue} \n"
-        else
-          "[ ] #{name} \n"
-        end
+        status = STATUS[job.status]
+        color = status[:color]
+        symbol = status[:symbol].colorize color
+        name = job.name.colorize color
+        "  #{symbol} #{name}\n"
       end
 
       def jobs_by_type(type)
@@ -95,48 +124,23 @@ module Gush
       end
 
       def sorted_jobs
-        workflow.jobs.sort_by do |job|
-          case
-          when job.failed?
-            0
-          when job.finished?
-            1
-          when job.enqueued?
-            2
-          when job.running?
-            3
-          else
-            4
-          end
-        end
+        @workflow.jobs.sort_by { |j| STATUS.keys.reverse.index j.status }
       end
 
       def failed_job
-        workflow.jobs.find(&:failed?).name
+        @workflow.jobs.find(&:failed?).name
       end
 
       def total_jobs_count
-        workflow.jobs.count
+        @workflow.jobs.count
       end
 
-      def failed_jobs_count
-        workflow.jobs.count(&:failed?).to_s
-      end
-
-      def succeeded_jobs_count
-        workflow.jobs.count(&:succeeded?).to_s
-      end
-
-      def enqueued_jobs_count
-        workflow.jobs.count(&:enqueued?).to_s
-      end
-
-      def running_jobs_count
-        workflow.jobs.count(&:running?).to_s
+      def jobs_count(status)
+        @workflow.jobs.count &:"#{status}?"
       end
 
       def remaining_jobs_count
-        workflow.jobs.count{|j| [j.finished?, j.failed?, j.enqueued?].none? }.to_s
+        @workflow.jobs.count(&:remaining?).to_s
       end
     end
   end

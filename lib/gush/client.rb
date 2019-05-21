@@ -116,6 +116,11 @@ module Gush
       end
     end
 
+    def find_job_class(job_name)
+      job_klass, _ = job_name.split('|')
+      job_klass.constantize
+    end
+
     def find_job(workflow_id, job_name)
       job_name_match = /(?<klass>\w*[^-])-(?<identifier>.*)/.match(job_name)
 
@@ -163,8 +168,10 @@ module Gush
       job.enqueue!
       persist_job(workflow_id, job)
       queue = job.queue || configuration.namespace
-
-      Gush::Worker.set(queue: queue).perform_later(*[workflow_id, job.name])
+      options = { queue: queue }
+      options.merge! job.class.gush_options_hash
+      options.merge! job.class.sidekiq_options_hash
+      Gush::Worker.set(options).perform_async(workflow_id, job.name)
     end
 
     private
@@ -178,13 +185,13 @@ module Gush
     end
 
     def find_job_by_klass(workflow_id, job_name)
-      new_cursor, result = connection_pool.with do |redis|
+      _, result = connection_pool.with do |redis|
         redis.hscan("gush.jobs.#{workflow_id}.#{job_name}", 0, count: 1)
       end
 
       return nil if result.empty?
 
-      job_id, job = *result[0]
+      _, job = *result[0]
 
       job
     end

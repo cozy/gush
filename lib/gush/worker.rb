@@ -1,42 +1,30 @@
-require 'active_job'
+require 'sidekiq'
 require 'redis-mutex'
 
 module Gush
-  class Worker < ::ActiveJob::Base
+  class Worker
+    include Sidekiq::Worker
+
+    sidekiq_retries_exhausted do |args, ex|
+      worker = self.new
+      worker.setup_job *args['args']
+      worker.fail! ex.message
+    end
+
     def perform(workflow_id, job_id)
       setup_job(workflow_id, job_id)
-
       job.payloads = incoming_payloads
-
-      error = nil
-      mark_as_started
+      start!
 
       begin
         job.perform
-      rescue StandardError => error
-        unless internal_retry error
-          mark_as_failed error.message
-          raise error
-        end
+      rescue => error
+        error! error.message
+        raise error
       else
-        mark_as_finished
+        succeed!
         enqueue_outgoing_jobs
       end
-    end
-
-    def serialize
-      super.merge 'retry_attempt' => retry_attempt
-    end
-
-    def deserialize(job_data)
-      super job_data
-      @retry_attempt = job_data.fetch 'retry_attempt', 1
-    end
-
-    private
-
-    def retry_attempt
-      @retry_attempt ||= 1
     end
 
     attr_reader :client, :workflow_id, :job
@@ -48,7 +36,8 @@ module Gush
     def setup_job(workflow_id, job_id)
       @workflow_id = workflow_id
       @job ||= client.find_job(workflow_id, job_id)
-      @retry = @job.class.instance_variable_get :@retry
+
+      self.class.sidekiq_retry_in &@job.class.sidekiq_retry_in_block
     end
 
     def incoming_payloads
@@ -62,18 +51,23 @@ module Gush
       end
     end
 
-    def mark_as_finished
-      job.finish!
-      client.persist_job(workflow_id, job)
-    end
-
-    def mark_as_failed(error)
-      job.fail!(error)
-      client.persist_job(workflow_id, job)
-    end
-
-    def mark_as_started
+    def start!
       job.start!
+      client.persist_job(workflow_id, job)
+    end
+
+    def succeed!
+      job.succeed!
+      client.persist_job(workflow_id, job)
+    end
+
+    def error!(error)
+      job.error!(error)
+      client.persist_job(workflow_id, job)
+    end
+
+    def fail!(error)
+      job.fail!(error)
       client.persist_job(workflow_id, job)
     end
 
@@ -91,24 +85,6 @@ module Gush
           end
         end
       end
-    end
-
-    def internal_retry(exception)
-      return false unless @retry
-
-      should_retry = @retry.should_retry? @retry_attempt, exception
-      return false unless should_retry
-
-      this_delay = @retry.retry_delay @retry_attempt, exception
-      cb         = @retry.retry_callback
-
-      cb = cb && instance_exec(exception, this_delay, &cb)
-      return false if cb == :halt
-
-      # TODO: This breaks DelayedJob and Resque for some weird ActiveSupport reason
-      # logger.info("Retrying (attempt #{retry_attempt + 1}, waiting #{this_delay}s
-      @retry_attempt += 1
-      retry_job wait: this_delay
     end
   end
 end

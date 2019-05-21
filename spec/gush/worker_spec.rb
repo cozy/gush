@@ -33,7 +33,7 @@ describe Gush::Worker do
 
     context "when job completes successfully" do
       it "should mark it as succedeed" do
-        expect(subject).to receive(:mark_as_finished)
+        expect(subject).to receive(:succeed!)
 
         subject.perform(workflow.id, "Prepare")
       end

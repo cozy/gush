@@ -1,13 +1,12 @@
-require 'spec_helper'
-require 'pry'
+require "spec_helper"
+require "pry"
 
 describe "Workflows" do
   context "when all jobs finish successfuly" do
     it "marks workflow as completed" do
       flow = TestWorkflow.create
-      perform_enqueued_jobs do
-        flow.start!
-      end
+      flow.start!
+      Gush::Worker.drain
 
       flow = flow.reload
       expect(flow).to be_finished
@@ -19,23 +18,22 @@ describe "Workflows" do
     flow = TestWorkflow.create
     flow.start!
 
-    expect(Gush::Worker).to have_jobs(flow.id, jobs_with_id(['Prepare']))
+    expect(Gush::Worker).to have_jobs(flow.id, jobs_with_id(%w[Prepare]))
 
-    perform_one
-    expect(Gush::Worker).to have_jobs(flow.id, jobs_with_id(["FetchFirstJob", "FetchSecondJob"]))
+    Gush::Worker.perform_one
+    expect(Gush::Worker).to have_jobs(flow.id, jobs_with_id(%w[FetchFirstJob FetchSecondJob]))
 
-    perform_one
-    expect(Gush::Worker).to have_jobs(flow.id, jobs_with_id(["FetchSecondJob", "PersistFirstJob"]))
+    Gush::Worker.perform_one
+    expect(Gush::Worker).to have_jobs(flow.id, jobs_with_id(%w[FetchSecondJob PersistFirstJob]))
 
-    perform_one
-    expect(Gush::Worker).to have_jobs(flow.id, jobs_with_id(["PersistFirstJob"]))
+    Gush::Worker.perform_one
+    expect(Gush::Worker).to have_jobs(flow.id, jobs_with_id(%w[PersistFirstJob]))
 
-    perform_one
-    expect(Gush::Worker).to have_jobs(flow.id, jobs_with_id(["NormalizeJob"]))
+    Gush::Worker.perform_one
+    expect(Gush::Worker).to have_jobs(flow.id, jobs_with_id(%w[NormalizeJob]))
 
-    perform_one
-
-    expect(ActiveJob::Base.queue_adapter.enqueued_jobs).to be_empty
+    Gush::Worker.perform_one
+    expect(Gush::Worker.jobs).to be_empty
   end
 
   it "passes payloads down the workflow" do
@@ -53,7 +51,7 @@ describe "Workflows" do
 
     class PrependJob < Gush::Job
       def perform
-        string = "#{payloads.find { |j| j[:class] == 'PrefixJob'}[:output]}: #{payloads.find { |j| j[:class] == 'UpcaseJob'}[:output]}"
+        string = "#{payloads.find { |j| j[:class] == "PrefixJob"}[:output]}: #{payloads.find { |j| j[:class] == "UpcaseJob"}[:output]}"
         output string
       end
     end
@@ -69,13 +67,13 @@ describe "Workflows" do
     flow = PayloadWorkflow.create
     flow.start!
 
-    perform_one
+    Gush::Worker.perform_one
     expect(flow.reload.find_job("UpcaseJob").output_payload).to eq("SOME TEXT")
 
-    perform_one
+    Gush::Worker.perform_one
     expect(flow.reload.find_job("PrefixJob").output_payload).to eq("A prefix")
 
-    perform_one
+    Gush::Worker.perform_one
     expect(flow.reload.find_job("PrependJob").output_payload).to eq("A prefix: SOME TEXT")
 
 
@@ -97,9 +95,9 @@ describe "Workflows" do
     class PayloadWorkflow < Gush::Workflow
       def configure
         jobs = []
-        jobs << run(RepetitiveJob, params: {input: 'first'})
-        jobs << run(RepetitiveJob, params: {input: 'second'})
-        jobs << run(RepetitiveJob, params: {input: 'third'})
+        jobs << run(RepetitiveJob, params: {input: "first"})
+        jobs << run(RepetitiveJob, params: {input: "second"})
+        jobs << run(RepetitiveJob, params: {input: "third"})
         run SummaryJob, after: jobs
       end
     end
@@ -107,22 +105,22 @@ describe "Workflows" do
     flow = PayloadWorkflow.create
     flow.start!
 
-    perform_one
-    expect(flow.reload.find_job(flow.jobs[0].name).output_payload).to eq('first')
+    Gush::Worker.perform_one
+    expect(flow.reload.find_job(flow.jobs[0].name).output_payload).to eq("first")
 
-    perform_one
-    expect(flow.reload.find_job(flow.jobs[1].name).output_payload).to eq('second')
+    Gush::Worker.perform_one
+    expect(flow.reload.find_job(flow.jobs[1].name).output_payload).to eq("second")
 
-    perform_one
-    expect(flow.reload.find_job(flow.jobs[2].name).output_payload).to eq('third')
+    Gush::Worker.perform_one
+    expect(flow.reload.find_job(flow.jobs[2].name).output_payload).to eq("third")
 
-    perform_one
+    Gush::Worker.perform_one
     expect(flow.reload.find_job(flow.jobs[3].name).output_payload).to eq(%w(first second third))
   end
 
   it "does not execute `configure` on each job for huge workflows" do
-    INTERNAL_SPY = double('spy')
-    INTERNAL_CONFIGURE_SPY = double('configure spy')
+    INTERNAL_SPY = double("spy")
+    INTERNAL_CONFIGURE_SPY = double("configure spy")
     expect(INTERNAL_SPY).to receive(:some_method).exactly(110).times
 
     # One time when persisting, second time when reloading in the spec
@@ -151,7 +149,7 @@ describe "Workflows" do
     flow.start!
 
     110.times do
-      perform_one
+      Gush::Worker.perform_one
     end
 
     flow = flow.reload
@@ -159,8 +157,8 @@ describe "Workflows" do
     expect(flow).to_not be_failed
   end
 
-  it 'executes job with multiple ancestors only once' do
-    NO_DUPS_INTERNAL_SPY = double('spy')
+  it "executes job with multiple ancestors only once" do
+    NO_DUPS_INTERNAL_SPY = double("spy")
     expect(NO_DUPS_INTERNAL_SPY).to receive(:some_method).exactly(1).times
 
     class FirstAncestor < Gush::Job
@@ -191,9 +189,10 @@ describe "Workflows" do
     flow = NoDuplicatesWorkflow.create
     flow.start!
 
-    5.times do
-      perform_one
+    3.times do
+      Gush::Worker.perform_one
     end
+    expect{Gush::Worker.perform_one}.to raise_error Sidekiq::EmptyQueueError
 
     flow = flow.reload
     expect(flow).to be_finished

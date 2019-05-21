@@ -98,24 +98,58 @@ module Gush
       job
     end
 
+    def started?
+      !!started_at
+    end
+
     def finished?
       jobs.all?(&:finished?)
     end
 
-    def started?
-      !!started_at
+    def succeeded?
+      jobs.all?(&:succeeded?)
     end
 
     def running?
       started? && !finished?
     end
 
+    def retrying?
+      running? && failed?
+    end
+
     def failed?
       jobs.any?(&:failed?)
     end
 
+    def error?
+      jobs.any?(&:error?)
+    end
+
     def stopped?
       stopped
+    end
+
+    def enqueued?
+      jobs.any?(&:enqueued?)
+    end
+
+    def status
+      if finished?
+        return :succeeded if succeeded?
+        return :failed if failed?
+        raise StandardError, 'Unknown state'
+      end
+
+      if started?
+        return :retrying if failed?
+        return :running
+      end
+
+      return :stopped if stopped?
+      return :enqueued if enqueued?
+
+      :pending
     end
 
     def run(klass, opts = {})
@@ -154,21 +188,6 @@ module Gush
 
     def initial_jobs
       jobs.select(&:has_no_dependencies?)
-    end
-
-    def status
-      case
-        when failed?
-          :failed
-        when running?
-          :running
-        when finished?
-          :finished
-        when stopped?
-          :stopped
-        else
-          :running
-      end
     end
 
     def started_at

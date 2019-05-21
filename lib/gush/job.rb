@@ -4,6 +4,29 @@ module Gush
       :finished_at, :failed_at, :started_at, :enqueued_at, :payloads, :klass, :queue
     attr_reader :id, :klass, :output_payload, :params, :error
 
+    class << self
+      attr_reader :sidekiq_retry_in_block
+      def sidekiq_retry_in(&block)
+        @sidekiq_retry_in_block = block
+      end
+
+      def sidekiq_options(options={})
+        @sidekiq_options_hash = options
+      end
+
+      def sidekiq_options_hash
+        @sidekiq_options_hash ||= {}
+      end
+
+      def gush_options(options={})
+        @gush_options_hash = options
+      end
+
+      def gush_options_hash
+        @gush_options_hash ||= {}
+      end
+    end
+
     def initialize(opts = {})
       options = opts.dup
       assign_variables(options)
@@ -14,12 +37,13 @@ module Gush
         id: id,
         klass: klass.to_s,
         queue: queue,
+        status: status,
         incoming: incoming,
         outgoing: outgoing,
-        finished_at: finished_at,
         enqueued_at: enqueued_at,
         started_at: started_at,
         failed_at: failed_at,
+        finished_at: finished_at,
         params: params,
         workflow_id: workflow_id,
         output_payload: output_payload,
@@ -30,7 +54,7 @@ module Gush
     def name
       @name ||= "#{klass}|#{id}"
     end
-    
+
     def payload(clazz)
       payload = payloads.detect { |f| f[:class] == clazz.name }
       raise "Unable to find payload for #{clazz}, available: #{payloads.collect { |f| f[:class]}}" unless payload
@@ -52,40 +76,46 @@ module Gush
     def perform
     end
 
-    def start!
-      @started_at = current_timestamp
-    end
-
     def enqueue!
       @enqueued_at = current_timestamp
       @started_at = nil
       @finished_at = nil
       @failed_at = nil
+      @error = nil
+    end
+
+    def start!
+      @started_at = current_timestamp
+      @failed_at = nil
+      @error = nil
     end
 
     def finish!
       @finished_at = current_timestamp
     end
 
-    def fail!(error = nil)
-      @finished_at = @failed_at = current_timestamp
+    def succeed!
+      @failed_at = nil
+      @error = nil
+      self.finish!
+    end
+
+    def error!(error)
+      @failed_at = current_timestamp
       @error = error
     end
 
+    def fail!(error = nil)
+      self.error! error
+      self.finish!
+    end
+
+    def pending?
+      enqueued_at.nil?
+    end
+
     def enqueued?
-      !enqueued_at.nil?
-    end
-
-    def finished?
-      !finished_at.nil?
-    end
-
-    def failed?
-      !failed_at.nil?
-    end
-
-    def succeeded?
-      finished? && !failed?
+      !pending?
     end
 
     def started?
@@ -94,6 +124,43 @@ module Gush
 
     def running?
       started? && !finished?
+    end
+
+    def retrying?
+      running? && failed?
+    end
+
+    def finished?
+      !finished_at.nil?
+    end
+
+    def remaining?
+      !finished?
+    end
+
+    def succeeded?
+      finished? && !failed?
+    end
+
+    def failed?
+      !failed_at.nil?
+    end
+
+    def status
+      if finished?
+        return :succeeded if succeeded?
+        return :failed if failed?
+        raise StandardError, 'Unknown state'
+      end
+
+      if started?
+        return :retrying if failed?
+        return :running
+      end
+
+      return :enqueued if enqueued?
+
+      :pending
     end
 
     def ready_to_start?

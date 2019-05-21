@@ -68,6 +68,7 @@ describe Gush::Job do
           klass: "Gush::Job",
           incoming: [],
           outgoing: [],
+          status: :succeeded,
           failed_at: nil,
           started_at: nil,
           finished_at: 123,
@@ -75,7 +76,8 @@ describe Gush::Job do
           params: {},
           queue: nil,
           output_payload: nil,
-          workflow_id: 123
+          workflow_id: 123,
+          error: nil
         }
         expect(job.as_json).to eq(expected)
       end

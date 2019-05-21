@@ -1,10 +1,11 @@
 require 'gush'
 require 'fakeredis'
-require 'json'
 require 'pry'
+require 'sidekiq/testing'
 
-ActiveJob::Base.queue_adapter = :test
-ActiveJob::Base.logger = nil
+Sidekiq.default_worker_options = { retry: false }
+Sidekiq::Testing.fake!
+# Sidekiq::Logging.logger = nil
 
 class Prepare < Gush::Job; end
 class FetchFirstJob < Gush::Job; end
@@ -48,11 +49,11 @@ module GushHelpers
   end
 
   def perform_one
-    job = ActiveJob::Base.queue_adapter.enqueued_jobs.first
+    job = Gush::Worker.jobs.first
     if job
-      Gush::Worker.new.perform(*job[:args])
-      ActiveJob::Base.queue_adapter.performed_jobs << job
-      ActiveJob::Base.queue_adapter.enqueued_jobs.shift
+      Gush::Worker.perform_async(*job[:args])
+      Gush::Worker.jobs << job
+      Gush::Worker.jobs.shift
     end
   end
 
@@ -66,20 +67,20 @@ module GushHelpers
 end
 
 RSpec::Matchers.define :have_jobs do |flow, jobs|
-  match do |actual|
+  match do
     expected = jobs.map do |job|
-      hash_including(args: include(flow, job))
+      hash_including('args' => include(flow, job))
     end
-    expect(ActiveJob::Base.queue_adapter.enqueued_jobs).to match_array(expected)
+    expect(Gush::Worker.jobs).to match_array(expected)
   end
 
   failure_message do |actual|
-    "expected queue to have #{jobs}, but instead has: #{ActiveJob::Base.queue_adapter.enqueued_jobs.map{ |j| j[:args][1]}}"
+    "expected queue to have #{jobs}, but instead has: #{actual.jobs.map{ |j| j[1]}}"
   end
 end
 
 RSpec.configure do |config|
-  config.include ActiveJob::TestHelper
+  # config.include ActiveJob::TestHelper
   config.include GushHelpers
 
   config.mock_with :rspec do |mocks|
@@ -87,19 +88,14 @@ RSpec.configure do |config|
   end
 
   config.before(:each) do
-    clear_enqueued_jobs
-    clear_performed_jobs
-
     Gush.configure do |config|
       config.redis_url = REDIS_URL
       config.gushfile = GUSHFILE
     end
   end
 
-
   config.after(:each) do
-    clear_enqueued_jobs
-    clear_performed_jobs
+    Sidekiq::Worker.clear_all
     redis.flushdb
   end
 end

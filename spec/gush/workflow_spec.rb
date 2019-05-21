@@ -21,6 +21,7 @@ describe Gush::Workflow do
     context "when failed" do
       it "returns :failed" do
         flow = TestWorkflow.create
+        flow.jobs.each &:finish!
         flow.find_job("Prepare").fail!
         flow.persist!
         expect(flow.reload.status).to eq(:failed)
@@ -95,7 +96,7 @@ describe Gush::Workflow do
           "id" => an_instance_of(String),
           "name" => klass.to_s,
           "klass" => klass.to_s,
-          "status" => "running",
+          "status" => "pending",
           "total" => 2,
           "finished" => 0,
           "started_at" => nil,

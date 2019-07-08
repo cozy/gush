@@ -128,7 +128,7 @@ module Gush
       end
     end
 
-    def abort!(*args)
+    def abort_job!(*args)
       raise AbortError, *args
     end
 

@@ -110,6 +110,28 @@ module Gush
       self.finish!
     end
 
+    class AbortError < StandardError
+      def initialize(*args)
+        @args = args
+      end
+
+      def exception
+        @exception ||= begin
+           clazz, *args = @args
+           if clazz.is_a? Exception
+             clazz
+           else
+             clazz, args = RuntimeError, clazz if args.empty?
+             clazz.new *args
+           end
+        end
+      end
+    end
+
+    def abort!(*args)
+      raise AbortError, *args
+    end
+
     def pending?
       enqueued_at.nil?
     end

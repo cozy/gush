@@ -18,9 +18,14 @@ module Gush
 
       begin
         job.perform
+      rescue Job::AbortError => abort
+        exception = abort.exception
+        fail! exception.to_s
+        # Don't reraise the exception, but log it on Sentry if any
+        Raven.capture_exception(exception) if defined?(Raven)
       rescue => error
-        error! error.message
-        raise error
+        error! error.to_s
+        raise
       else
         succeed!
         enqueue_outgoing_jobs

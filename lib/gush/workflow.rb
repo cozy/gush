@@ -115,15 +115,11 @@ module Gush
     end
 
     def retrying?
-      running? && failed?
+      jobs.any?(&:retrying?)
     end
 
     def failed?
       jobs.any?(&:failed?)
-    end
-
-    def error?
-      jobs.any?(&:error?)
     end
 
     def stopped?
@@ -135,20 +131,12 @@ module Gush
     end
 
     def status
-      if finished?
-        return :succeeded if succeeded?
-        return :failed if failed?
-        raise StandardError, 'Unknown state'
-      end
-
-      if started?
-        return :retrying if failed?
-        return :running
-      end
-
+      return :succeeded if succeeded?
+      return :failed if failed?
+      return :retrying if retrying?
       return :stopped if stopped?
       return :enqueued if enqueued?
-
+      return :running if started?
       :pending
     end
 

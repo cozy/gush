@@ -42,7 +42,8 @@ module Gush
       @workflow_id = workflow_id
       @job ||= client.find_job(workflow_id, job_id)
 
-      self.class.sidekiq_retry_in &@job.class.sidekiq_retry_in_block
+      retry_in = @job.class.sidekiq_retry_in_block
+      self.class.sidekiq_retry_in &retry_in if retry_in
     end
 
     def incoming_payloads

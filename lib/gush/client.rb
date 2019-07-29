@@ -101,7 +101,7 @@ module Gush
 
     def persist_workflow(workflow)
       connection_pool.with do |redis|
-        redis.set("gush.workflows.#{workflow.id}", workflow.to_json)
+        redis.set(workflow.key, workflow.to_json)
       end
 
       workflow.jobs.each { |j| persist_job(j) }
@@ -112,7 +112,7 @@ module Gush
 
     def persist_job(job)
       connection_pool.with do |redis|
-        redis.hset("gush.jobs.#{workflow_id}.#{job.klass}", job.id, job.to_json)
+        redis.hset(job.key, job.id, job.to_json)
       end
     end
 
@@ -138,21 +138,21 @@ module Gush
 
     def destroy_workflow(workflow)
       connection_pool.with do |redis|
-        redis.del("gush.workflows.#{workflow.id}")
+        redis.del(workflow.key)
       end
       workflow.jobs.each { |j| destroy_job(j) }
     end
 
     def destroy_job(job)
       connection_pool.with do |redis|
-        redis.del("gush.jobs.#{workflow_id}.#{job.klass}")
+        redis.del(job.key)
       end
     end
 
     def expire_workflow(workflow, ttl=nil)
       ttl = ttl || configuration.ttl
       connection_pool.with do |redis|
-        redis.expire("gush.workflows.#{workflow.id}", ttl)
+        redis.expire(workflow.key, ttl)
       end
       workflow.jobs.each {|job| expire_job(job, ttl) }
     end
@@ -160,7 +160,7 @@ module Gush
     def expire_job(job, ttl=nil)
       ttl = ttl || configuration.ttl
       connection_pool.with do |redis|
-        redis.expire("gush.jobs.#{workflow_id}.#{job.name}", ttl)
+        redis.expire(job.key, ttl)
       end
     end
 
@@ -178,7 +178,6 @@ module Gush
 
     def find_job_by_klass_and_id(workflow_id, job_name)
       job_klass, job_id = job_name.split('|')
-
       connection_pool.with do |redis|
         redis.hget("gush.jobs.#{workflow_id}.#{job_klass}", job_id)
       end

@@ -32,6 +32,10 @@ module Gush
       assign_variables(options)
     end
 
+    def key
+      "gush.jobs.#{workflow_id}.#{klass}"
+    end
+
     def as_json
       {
         id: id,

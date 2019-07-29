@@ -105,6 +105,7 @@ module Gush
       end
 
       workflow.jobs.each { |j| persist_job(j) }
+      workflow.expire!
       workflow.mark_as_persisted
 
       true
@@ -151,17 +152,13 @@ module Gush
 
     def expire_workflow(workflow, ttl=nil)
       ttl = ttl || configuration.ttl
-      connection_pool.with do |redis|
-        redis.expire(workflow.key, ttl)
-      end
-      workflow.jobs.each {|job| expire_job(job, ttl) }
+      keys = [workflow.key] + workflow.jobs.collect { |j| j.key }
+      persist_or_expire *keys, ttl: ttl
     end
 
     def expire_job(job, ttl=nil)
       ttl = ttl || configuration.ttl
-      connection_pool.with do |redis|
-        redis.expire(job.key, ttl)
-      end
+      persist_or_expire job.key, ttl: ttl
     end
 
     def enqueue_job(workflow_id, job)
@@ -175,6 +172,17 @@ module Gush
     end
 
     private
+
+    def persist_or_expire(*keys, ttl: nil)
+      action = (ttl.nil? || ttl < 0) ? :persist : :expire
+      connection_pool.with do |redis|
+        if action == :persist
+          keys.each { |k| redis.persist(k) }
+        else
+          keys.each { |k| redis.expire(k, ttl) }
+        end
+      end
+    end
 
     def find_job_by_klass_and_id(workflow_id, job_name)
       job_klass, job_id = job_name.split('|')

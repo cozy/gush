@@ -58,22 +58,22 @@ module Gush
 
     def start!
       job.start!
-      client.persist_job(workflow_id, job)
+      client.persist_job(job)
     end
 
     def succeed!
       job.succeed!
-      client.persist_job(workflow_id, job)
+      client.persist_job(job)
     end
 
     def error!(error)
       job.error!(error)
-      client.persist_job(workflow_id, job)
+      client.persist_job(job)
     end
 
     def fail!(error)
       job.fail!(error)
-      client.persist_job(workflow_id, job)
+      client.persist_job(job)
     end
 
     def elapsed(start)

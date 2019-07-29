@@ -74,7 +74,7 @@ describe Gush::Client do
     it "persists JSON dump of the Workflow and its jobs" do
       job = double("job", to_json: 'json')
       workflow = double("workflow", id: 'abcd', jobs: [job, job, job], to_json: '"json"')
-      expect(client).to receive(:persist_job).exactly(3).times.with(workflow.id, job)
+      expect(client).to receive(:persist_job).exactly(3).times.with(job)
       expect(workflow).to receive(:mark_as_persisted)
       client.persist_workflow(workflow)
       expect(redis.keys("gush.workflows.abcd").length).to eq(1)
@@ -100,16 +100,16 @@ describe Gush::Client do
 
       client.expire_workflow(workflow, -1)
 
-      # => TODO - I believe fakeredis does not handle TTL the same.   
+      # => TODO - I believe fakeredis does not handle TTL the same.
     end
   end
 
   describe "#persist_job" do
     it "persists JSON dump of the job in Redis" do
 
-      job = BobJob.new(name: 'bob')
+      job = BobJob.new(workflow_id: 'deadbeef', name: 'bob')
 
-      client.persist_job('deadbeef', job)
+      client.persist_job(job)
       expect(redis.keys("gush.jobs.deadbeef.*").length).to eq(1)
     end
   end

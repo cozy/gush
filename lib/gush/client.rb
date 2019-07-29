@@ -123,7 +123,7 @@ module Gush
     end
 
     def find_job(workflow_id, job_name)
-      job_name_match = /(?<klass>\w*[^-])-(?<identifier>.*)/.match(job_name)
+      job_name_match = /(?<klass>.*)\|(?<identifier>.*)/.match(job_name)
 
       data = if job_name_match
                find_job_by_klass_and_id(workflow_id, job_name)
@@ -191,9 +191,9 @@ module Gush
       end
     end
 
-    def find_job_by_klass(workflow_id, job_name)
+    def find_job_by_klass(workflow_id, klass)
       _, result = connection_pool.with do |redis|
-        redis.hscan("gush.jobs.#{workflow_id}.#{job_name}", 0, count: 1)
+        redis.hscan("gush.jobs.#{workflow_id}.#{klass}", 0, count: 1)
       end
 
       return nil if result.empty?

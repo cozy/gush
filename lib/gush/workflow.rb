@@ -15,6 +15,10 @@ module Gush
       setup
     end
 
+    def key
+      "gush.workflows.#{id}"
+    end
+
     def self.find(id)
       Gush::Client.new.find_workflow(id)
     end

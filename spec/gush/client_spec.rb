@@ -76,6 +76,7 @@ describe Gush::Client do
       workflow = double("workflow", id: 'abcd', jobs: [job, job, job], to_json: '"json"')
       expect(client).to receive(:persist_job).exactly(3).times.with(job)
       expect(workflow).to receive(:mark_as_persisted)
+      expect(workflow).to receive(:key).and_return('gush.workflows.abcd')
       client.persist_workflow(workflow)
       expect(redis.keys("gush.workflows.abcd").length).to eq(1)
     end

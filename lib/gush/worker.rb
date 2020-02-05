@@ -40,18 +40,22 @@ module Gush
 
     def setup_job(workflow_id, job_id)
       @workflow_id = workflow_id
-      @job ||= client.find_job(workflow_id, job_id)
-
-      retry_in = @job.class.sidekiq_retry_in_block
-      self.class.sidekiq_retry_in &retry_in if retry_in
+      @job         ||= client.find_job(workflow_id, job_id)
+      raise "Job not found #{workflow_id}/#{job_id}" unless @job
+      clazz = @job.class
+      if clazz.respond_to? :sidekiq_retry_in_block
+        retry_in = clazz.sidekiq_retry_in_block
+        self.class.sidekiq_retry_in &retry_in if retry_in
+      end
+      @job
     end
 
     def incoming_payloads
       job.incoming.map do |job_name|
         job = client.find_job(workflow_id, job_name)
         {
-          id: job.name,
-          class: job.klass.to_s,
+          id:     job.name,
+          class:  job.klass.to_s,
           output: job.output_payload
         }
       end

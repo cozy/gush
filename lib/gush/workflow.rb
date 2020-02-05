@@ -5,12 +5,12 @@ module Gush
     attr_accessor :id, :jobs, :stopped, :persisted, :arguments, :dependencies
 
     def initialize(*args)
-      @id = id
-      @jobs = []
+      @id           = id
+      @jobs         = []
       @dependencies = []
-      @persisted = false
-      @stopped = false
-      @arguments = args
+      @persisted    = false
+      @stopped      = false
+      @arguments    = args
 
       setup
     end
@@ -41,7 +41,7 @@ module Gush
     end
 
     def continue
-      client = Gush::Client.new
+      client      = Gush::Client.new
       failed_jobs = jobs.select(&:failed?)
 
       failed_jobs.each do |job|
@@ -68,7 +68,7 @@ module Gush
       client.persist_workflow(self)
     end
 
-    def expire! (ttl=nil)
+    def expire! (ttl = nil)
       client.expire_workflow(self, ttl)
     end
 
@@ -134,10 +134,12 @@ module Gush
       jobs.any?(&:enqueued?)
     end
 
+    TERMINAL_STATES = %i[succeeded failed stopped].freeze
+
     def status
       return :succeeded if succeeded?
-      return :failed if failed?
       return :retrying if retrying?
+      return :failed if failed?
       return :stopped if stopped?
       return :enqueued if enqueued?
       return :running if started?
@@ -146,24 +148,24 @@ module Gush
 
     def run(klass, opts = {})
       node = klass.new({
-        workflow_id: id,
-        id: client.next_free_job_id(id, klass.to_s),
-        params: opts.fetch(:params, {}),
-        queue: opts[:queue]
-      })
+                         workflow_id: id,
+                         id:          client.next_free_job_id(id, klass.to_s),
+                         params:      opts.fetch(:params, {}),
+                         queue:       opts[:queue]
+                       })
 
       jobs << node
 
       deps_after = [*opts[:after]]
 
       deps_after.each do |dep|
-        @dependencies << {from: dep.to_s, to: node.name.to_s }
+        @dependencies << { from: dep.to_s, to: node.name.to_s }
       end
 
       deps_before = [*opts[:before]]
 
       deps_before.each do |dep|
-        @dependencies << {from: node.name.to_s, to: dep.to_s }
+        @dependencies << { from: node.name.to_s, to: dep.to_s }
       end
 
       node.name
@@ -172,7 +174,7 @@ module Gush
     def reload
       flow = self.class.find(id)
 
-      self.jobs = flow.jobs
+      self.jobs    = flow.jobs
       self.stopped = flow.stopped
 
       self
@@ -193,15 +195,15 @@ module Gush
     def to_hash
       name = self.class.to_s
       {
-        name: name,
-        id: id,
-        arguments: @arguments,
-        total: jobs.count,
-        finished: jobs.count(&:finished?),
-        klass: name,
-        status: status,
-        stopped: stopped,
-        started_at: started_at,
+        name:        name,
+        id:          id,
+        arguments:   @arguments,
+        total:       jobs.count,
+        finished:    jobs.count(&:finished?),
+        klass:       name,
+        status:      status,
+        stopped:     stopped,
+        started_at:  started_at,
         finished_at: finished_at
       }
     end
@@ -245,11 +247,11 @@ module Gush
     end
 
     def first_job
-      jobs.min_by{ |n| n.started_at || Time.now.to_i }
+      jobs.min_by { |n| n.started_at || Time.now.to_i }
     end
 
     def last_job
-      jobs.max_by{ |n| n.finished_at || 0 } if finished?
+      jobs.max_by { |n| n.finished_at || 0 } if finished?
     end
   end
 end

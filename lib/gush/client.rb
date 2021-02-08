@@ -62,7 +62,7 @@ module Gush
       loop do
         id = SecureRandom.uuid
         available = connection_pool.with do |redis|
-          !redis.exists("gush.workflow.#{id}")
+          !redis.exists?("gush.workflow.#{id}")
         end
 
         break if available
@@ -141,7 +141,7 @@ module Gush
     def destroy_workflow(workflow)
       connection_pool.with do |redis|
         redis.del(workflow.key)
-        redis.del("gush.classes.#{job.workflow_id}")
+        redis.del("gush.classes.#{workflow.id}")
       end
       workflow.jobs.each { |j| destroy_job(j) }
     end
@@ -177,7 +177,7 @@ module Gush
     private
 
     def persist_or_expire(*keys, ttl: nil)
-      action = (ttl.nil? || ttl < 0) ? :persist : :expire
+      action = (ttl.nil? || ttl < 0) ? :persist : :expire
       connection_pool.with do |redis|
         if action == :persist
           keys.each { |k| redis.persist(k) }

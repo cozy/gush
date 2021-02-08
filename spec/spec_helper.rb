@@ -1,5 +1,4 @@
 require 'gush'
-require 'fakeredis'
 require 'pry'
 require 'sidekiq/testing'
 

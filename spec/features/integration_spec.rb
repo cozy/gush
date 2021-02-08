@@ -105,17 +105,19 @@ describe "Workflows" do
     flow = PayloadWorkflow.create
     flow.start!
 
-    Gush::Worker.perform_one
-    expect(flow.reload.find_job(flow.jobs[0].name).output_payload).to eq("first")
+    flow = flow.reload
+    repetitives = flow.jobs.select { |j| j.klass == RepetitiveJob.name }
+    repetitives.size.times { Gush::Worker.perform_one }
+    flow = flow.reload
+    repetitives = flow.jobs.select { |j| j.klass == RepetitiveJob.name }
+    repetitives.each do |job|
+      expect(job.output_payload).to eq job.params[:input]
+    end
 
     Gush::Worker.perform_one
-    expect(flow.reload.find_job(flow.jobs[1].name).output_payload).to eq("second")
-
-    Gush::Worker.perform_one
-    expect(flow.reload.find_job(flow.jobs[2].name).output_payload).to eq("third")
-
-    Gush::Worker.perform_one
-    expect(flow.reload.find_job(flow.jobs[3].name).output_payload).to eq(%w(first second third))
+    flow = flow.reload
+    summary = flow.jobs.find { |j| j.klass == SummaryJob.name }
+    expect(summary.output_payload).to eq(%w(first second third))
   end
 
   it "does not execute `configure` on each job for huge workflows" do

@@ -15,7 +15,6 @@ describe Gush::Client do
     end
 
     context "when given workflow exists" do
-
       it "returns Workflow object" do
         expected_workflow = TestWorkflow.create
         workflow = client.find_workflow(expected_workflow.id)
@@ -77,6 +76,7 @@ describe Gush::Client do
       expect(client).to receive(:persist_job).exactly(3).times.with(job)
       expect(workflow).to receive(:mark_as_persisted)
       expect(workflow).to receive(:key).and_return('gush.workflows.abcd')
+      expect(workflow).to receive(:expire!)
       client.persist_workflow(workflow)
       expect(redis.keys("gush.workflows.abcd").length).to eq(1)
     end
@@ -99,7 +99,7 @@ describe Gush::Client do
     it "sets TTL for all Redis keys related to the workflow" do
       workflow = TestWorkflow.create
 
-      client.expire_workflow(workflow, -1)
+      client.expire_workflow(workflow, nil)
 
       # => TODO - I believe fakeredis does not handle TTL the same.
     end

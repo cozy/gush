@@ -86,7 +86,7 @@ module Gush
 
         unless data.nil?
           hash = Gush::JSON.decode(data, symbolize_keys: true)
-          keys = redis.scan_each(match: "gush.jobs.#{id}.*")
+          keys = redis.smembers("gush.classes.#{id}")
 
           nodes = keys.each_with_object([]) do |key, array|
             array.concat redis.hvals(key).map { |json| Gush::JSON.decode(json, symbolize_keys: true) }
@@ -114,6 +114,7 @@ module Gush
     def persist_job(job)
       connection_pool.with do |redis|
         redis.hset(job.key, job.id, job.to_json)
+        redis.sadd("gush.classes.#{job.workflow_id}", job.key)
       end
     end
 
@@ -140,6 +141,7 @@ module Gush
     def destroy_workflow(workflow)
       connection_pool.with do |redis|
         redis.del(workflow.key)
+        redis.del("gush.classes.#{job.workflow_id}")
       end
       workflow.jobs.each { |j| destroy_job(j) }
     end
@@ -147,12 +149,13 @@ module Gush
     def destroy_job(job)
       connection_pool.with do |redis|
         redis.del(job.key)
+        redis.srem("gush.classes.#{job.workflow_id}", job.key)
       end
     end
 
     def expire_workflow(workflow, ttl=nil)
       ttl = ttl || configuration.ttl
-      keys = [workflow.key] + workflow.jobs.collect { |j| j.key }
+      keys = [workflow.key, "gush.classes.#{workflow.id}"] + workflow.jobs.collect { |j| j.key }
       persist_or_expire *keys, ttl: ttl
     end
 
